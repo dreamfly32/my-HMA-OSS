@@ -30,7 +30,8 @@ jobs:
           echo "Replacing app name with: $CUSTOM_APP_NAME"
 
           # 1. Replace package name in root build.gradle.kts
-          sed -i 's/val appPackageName by extra("org\.frknkrc44\.hma_oss")/val appPackageName by extra("'$NEW_PACKAGE_NAME'")/' build.gradle.kts
+          sed -i 's/val appPackageName by extra("org\.frknkrc44\.hma_oss")/val appPackageName by extra("'$CUSTOM_PACKAGE_NAME'")/' build.gradle.kts
+          cat build.gradle.kts
           
 
           # 2. Replace app_name in all strings.xml
