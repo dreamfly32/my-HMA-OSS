@@ -72,7 +72,7 @@ jobs:
       - name: Write key
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         run: |
-          echo localBuild=true >> local.properties
+          echo localBuild2=false >> local.properties
           echo storePassword='${{ secrets.KEY_STORE_PASSWORD }}' >> local.properties
           echo keyAlias='${{ secrets.KEY_ALIAS }}' >> local.properties
           echo keyPassword='${{ secrets.KEY_PASSWORD }}' >> local.properties
