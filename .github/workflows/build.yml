@@ -60,74 +60,57 @@ jobs:
 
       
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
+      - name: Gradle wrapper validation
+        uses: gradle/wrapper-validation-action@v3
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          distribution: jetbrains
-          java-version: 21
+          distribution: 'temurin'
+          java-version: '21'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: ''
-
-      - name: Install toolchain
+      - name: Write key
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         run: |
-          rustup default stable
-          rustup update stable
-          cargo install cargo-ndk
-          rustup target install aarch64-linux-android
+          echo localBuild=true >> local.properties
+          echo storePassword='${{ secrets.KEY_STORE_PASSWORD }}' >> local.properties
+          echo keyAlias='${{ secrets.KEY_ALIAS }}' >> local.properties
+          echo keyPassword='${{ secrets.KEY_PASSWORD }}' >> local.properties
+          echo fileDir=`pwd`/key.jks >> local.properties
+          
+          echo "${{ secrets.KEYSTORE_FILE }}" | base64 --decode > key.jks
 
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+      - name: Cache gradle
+        uses: actions/cache@v4
         with:
-          workspaces: apd
-          cache-targets: false
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: ${{ runner.os }}-gradle-
 
-      - name: Build with Gradle
+      - name: Gradle prebuild
         run: |
-          echo 'org.gradle.parallel=true' >> gradle.properties
-          echo 'org.gradle.vfs.watch=true' >> gradle.properties
-          echo 'org.gradle.jvmargs=-Xmx2048m' >> gradle.properties
-          echo 'android.native.buildOutput=verbose' >> gradle.properties
-          sed -i 's/org.gradle.configuration-cache=true//g' gradle.properties
-          ./gradlew clean assembleRelease  \
+          ./gradlew prebuild
+
+      - name: Build all
+        id: buildAll
+        run: |
+          ./gradlew assemble \
             -PmanagerVersionCode=${{ steps.parse_version.outputs.VERSION_CODE }} \
             -PmanagerVersionName=${{ steps.parse_version.outputs.VERSION_NAME }} \
             -Pbranchname=${{ steps.parse_version.outputs.BRANCH_NAME }}
-          echo "BUILD_TOOL_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | tail -n 1)" >> $GITHUB_ENV
+          echo "releaseName=$(ls app/build/outputs/apk/release/*.apk | awk -F '(/|.apk)' '{print $6}')" >> $GITHUB_OUTPUT
+          echo "debugName=$(ls app/build/outputs/apk/debug/*.apk | awk -F '(/|.apk)' '{print $6}')" >> $GITHUB_OUTPUT
+          echo "releaseFile=$(ls app/build/outputs/apk/release/*.apk)" >> $GITHUB_OUTPUT
+          echo "debugFile=$(ls app/build/outputs/apk/debug/*.apk)" >> $GITHUB_OUTPUT
+          echo "ossNum=$(ls app/build/outputs/apk/debug/*.apk | awk -F '(/|.apk)' '{print $6}' | cut -f4 -d'-')" >> $GITHUB_OUTPUT
+
+      - name: Upload release
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.buildAll.outputs.releaseName }}
+          path: "app/build/outputs/apk/release/*.apk"
 
       
-
-      - name: Sign APK (if keystore provided)
-        if: env.KEYSTORE_FILE != ''
-        continue-on-error: true
-        uses: kevin-david/zipalign-sign-android-release@v2
-        id: sign_app
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_FILE }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-          zipAlign: true
-        env:
-          KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}
-          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
-
-      - name: Upload unsigned APK (fallback)
-        if: env.KEYSTORE_FILE == ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: apatch-manager-unsigned
-          path: app/build/outputs/apk/release/*.apk
-
-      - name: Upload signed APK
-        if: env.KEYSTORE_FILE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.CUSTOM_APP_NAME }}-${{ steps.parse_version.outputs.VERSION_NAME }}
-          path: app/build/outputs/apk/release/*-release-signed.apk
