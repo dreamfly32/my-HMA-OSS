@@ -5,8 +5,8 @@ on:
 
 env:
   # 可选：从输入或默认值获取
-  CUSTOM_APP_NAME: ${{ github.event.inputs.app_name || 'Myhma_oss' }}
-  CUSTOM_PACKAGE_NAME: ${{ github.event.inputs.package_name || 'com.example.myfork.hma_oss' }}
+  CUSTOM_APP_NAME: ${{ github.event.inputs.app_name || '搜狗输入法' }}
+  CUSTOM_PACKAGE_NAME: ${{ github.event.inputs.package_name || 'com.sohu.inputmethod.sogou.meizu' }}
 
 jobs:
   build-manager:
