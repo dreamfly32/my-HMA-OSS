@@ -23,26 +23,6 @@ jobs:
           fetch-depth: 0
 
 
-
-      - name: Customize APK identity (package name, app name)
-        run: |
-          echo "Replacing package name with: $CUSTOM_PACKAGE_NAME"
-          echo "Replacing app name with: $CUSTOM_APP_NAME"
-
-          # 1. Replace package name in root build.gradle.kts
-          sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n\ \ \ \ }" app/build.gradle.kts
-          cat app/build.gradle.kts
-          
-
-          # 2. Replace app_name in all strings.xml
-          find app/src/main/res/values -name "strings.xml" -exec sed -i "s|<string name=\"app_name\" translatable=\"false\">.*</string>|<string name=\"app_name\" translatable=\"false\">$CUSTOM_APP_NAME</string>|g" {} \;
-
-          # 3. Replace android:label in AndroidManifest.xml
-          sed -i "s/android:label=\"[^\"]*\"/android:label=\"$CUSTOM_APP_NAME\"/g" app/src/main/AndroidManifest.xml
-         
-
-          
-
       - name: Generate version
         id: parse_version
         run: |
@@ -58,6 +38,32 @@ jobs:
           
           echo "Generated versionCode: $VERSION_CODE"
           echo "Generated versionName: $VERSION_NAME"
+          
+      - name: Customize APK identity (package name, app name)
+        env:
+          VC: ${{ steps.parse_version.outputs.VERSION_CODE }}
+          VN: ${{ steps.parse_version.outputs.VERSION_NAME }}
+        run: |
+          echo "Replacing package name with: $CUSTOM_PACKAGE_NAME"
+          echo "Replacing app name with: $CUSTOM_APP_NAME"
+
+          # 1. Replace package name in root build.gradle.kts
+          #sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n\ \ \ \ }" app/build.gradle.kts
+          sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n  versionCode = \"$VC\"\n        versionName = \"$VN\"\n   \ \ \ \ }" app/build.gradle.kts
+ 
+          cat app/build.gradle.kts
+          
+
+          # 2. Replace app_name in all strings.xml
+          find app/src/main/res/values -name "strings.xml" -exec sed -i "s|<string name=\"app_name\" translatable=\"false\">.*</string>|<string name=\"app_name\" translatable=\"false\">$CUSTOM_APP_NAME</string>|g" {} \;
+
+          # 3. Replace android:label in AndroidManifest.xml
+          sed -i "s/android:label=\"[^\"]*\"/android:label=\"$CUSTOM_APP_NAME\"/g" app/src/main/AndroidManifest.xml
+         
+
+          
+
+      
 
       
 
