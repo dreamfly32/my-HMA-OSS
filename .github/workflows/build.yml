@@ -1,4 +1,4 @@
-name: Build APatch Manager
+name: Build HMA-OSS Manager
 
 on:
   workflow_dispatch:
