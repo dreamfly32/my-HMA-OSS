@@ -1,0 +1,133 @@
+name: Build APatch Manager
+
+on:
+  workflow_dispatch:
+
+env:
+  # 可选：从输入或默认值获取
+  CUSTOM_APP_NAME: ${{ github.event.inputs.app_name || 'Myhma_oss' }}
+  CUSTOM_PACKAGE_NAME: ${{ github.event.inputs.package_name || 'com.example.myfork.hma_oss' }}
+
+jobs:
+  build-manager:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}   # 👈 全局可用！
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+
+      - name: Customize APK identity (package name, app name)
+        run: |
+          echo "Replacing package name with: $CUSTOM_PACKAGE_NAME"
+          echo "Replacing app name with: $CUSTOM_APP_NAME"
+
+          # 1. Replace package name in root build.gradle.kts
+          sed -i 's/val appPackageName by extra("org\.frknkrc44\.hma_oss")/val appPackageName by extra("'$NEW_PACKAGE_NAME'")/' build.gradle.kts
+          
+
+          # 2. Replace app_name in all strings.xml
+          find app/src/main/res/values -name "strings.xml" -exec sed -i "s|<string name=\"app_name\" translatable=\"false\">.*</string>|<string name=\"app_name\" translatable=\"false\">$CUSTOM_APP_NAME</string>|g" {} \;
+
+          # 3. Replace android:label in AndroidManifest.xml
+          sed -i "s/android:label=\"[^\"]*\"/android:label=\"$CUSTOM_APP_NAME\"/g" app/src/main/AndroidManifest.xml
+         
+
+          
+
+      - name: Generate version
+        id: parse_version
+        run: |
+          COMMIT_NUM=$(git rev-list --count HEAD)
+          VERSION_CODE=$(echo "$COMMIT_NUM + 200 + 10000" | bc)
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          VERSION_NAME="${VERSION_CODE}_${COMMIT_HASH}"
+          BRANCH=$(echo "${GITHUB_REF#refs/heads/}" | sed 's/refs\/tags\///')
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "BRANCH_NAME=$BRANCH" >> $GITHUB_OUTPUT
+          
+          echo "Generated versionCode: $VERSION_CODE"
+          echo "Generated versionName: $VERSION_NAME"
+
+      
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: jetbrains
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Install toolchain
+        run: |
+          rustup default stable
+          rustup update stable
+          cargo install cargo-ndk
+          rustup target install aarch64-linux-android
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apd
+          cache-targets: false
+
+      - name: Build with Gradle
+        run: |
+          echo 'org.gradle.parallel=true' >> gradle.properties
+          echo 'org.gradle.vfs.watch=true' >> gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx2048m' >> gradle.properties
+          echo 'android.native.buildOutput=verbose' >> gradle.properties
+          sed -i 's/org.gradle.configuration-cache=true//g' gradle.properties
+          ./gradlew clean assembleRelease  \
+            -PmanagerVersionCode=${{ steps.parse_version.outputs.VERSION_CODE }} \
+            -PmanagerVersionName=${{ steps.parse_version.outputs.VERSION_NAME }} \
+            -Pbranchname=${{ steps.parse_version.outputs.BRANCH_NAME }}
+          echo "BUILD_TOOL_VERSION=$(ls /usr/local/lib/android/sdk/build-tools/ | tail -n 1)" >> $GITHUB_ENV
+
+      
+
+      - name: Sign APK (if keystore provided)
+        if: env.KEYSTORE_FILE != ''
+        continue-on-error: true
+        uses: kevin-david/zipalign-sign-android-release@v2
+        id: sign_app
+        with:
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.KEYSTORE_FILE }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+          zipAlign: true
+        env:
+          KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}
+          BUILD_TOOLS_VERSION: ${{ env.BUILD_TOOL_VERSION }}
+
+      - name: Upload unsigned APK (fallback)
+        if: env.KEYSTORE_FILE == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: apatch-manager-unsigned
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Upload signed APK
+        if: env.KEYSTORE_FILE != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CUSTOM_APP_NAME }}-${{ steps.parse_version.outputs.VERSION_NAME }}
+          path: app/build/outputs/apk/release/*-release-signed.apk
