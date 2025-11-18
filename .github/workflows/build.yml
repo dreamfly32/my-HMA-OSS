@@ -48,8 +48,8 @@ jobs:
           echo "Replacing app name with: $CUSTOM_APP_NAME"
 
           # 1. Replace package name in root build.gradle.kts
-          #sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n\ \ \ \ }" app/build.gradle.kts
-          sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n  versionCode = $VC \n        versionName = \"$VN\"\n   \ \ \ \ }" app/build.gradle.kts
+          sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n\ \ \ \ }" app/build.gradle.kts
+          #sed -i "/^android {/a \ \ \ \ defaultConfig {\n\ \ \ \ \ \ \ \ applicationId = \"$CUSTOM_PACKAGE_NAME\"\n  versionCode = $VC \n        versionName = \"$VN\"\n   \ \ \ \ }" app/build.gradle.kts
  
           cat app/build.gradle.kts
           
